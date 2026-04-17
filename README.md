@@ -19,7 +19,7 @@
 ```bash
 # Клонирование репозитория
 git clone https://github.com/ViktorR-BarreL/diploma_phonoskop.git
-cd phonoskop
+cd diploma_phonoskop
 
 # Создание и активация виртуального окружения
 python -m venv venv

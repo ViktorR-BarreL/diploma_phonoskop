@@ -1,9 +1,0 @@
-name: mfa_env
-channels:
-  - conda-forge
-dependencies:
-  - python=3.10
-  - montreal-forced-aligner
-  - libsndfile
-  - pysoundfile
-  - ffmpeg

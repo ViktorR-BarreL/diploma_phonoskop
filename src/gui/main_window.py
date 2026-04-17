@@ -298,11 +298,14 @@ class MainWindow(QMainWindow):
         # Меню Вид
         view = bar.addMenu("Вид")
 
-        for name, target in [("Осциллограмма", self.canvas.p_wav), 
-                            ("Спектрограмма", self.canvas.p_spec)]:
-            a = QAction(name, self, checkable=True, checked=True)
-            a.triggered.connect(lambda c, t=target: t.setVisible(c))
-            view.addAction(a)
+        self.act_wav = QAction("Осциллограмма", self, checkable=True, checked=True)
+        self.act_spec = QAction("Спектрограмма", self, checkable=True, checked=True)
+
+        self.act_wav.triggered.connect(self.on_view_toggled)
+        self.act_spec.triggered.connect(self.on_view_toggled)
+
+        view.addAction(self.act_wav)
+        view.addAction(self.act_spec)
         
         view.addSeparator()
         
@@ -322,6 +325,17 @@ class MainWindow(QMainWindow):
         help_action.setShortcut(QKeySequence.StandardKey.HelpContents)
         help_action.triggered.connect(self.show_help)
         help_menu.addAction(help_action)
+
+    def on_view_toggled(self):
+        if not self.act_wav.isChecked() and not self.act_spec.isChecked():
+            sender = self.sender()
+            sender.setChecked(True)
+            return
+        
+        self.canvas.p_wav.setVisible(self.act_wav.isChecked())
+        self.canvas.p_spec.setVisible(self.act_spec.isChecked())
+        
+        self.canvas.ci.layout.activate()
 
     # Работа с проектами
     def new_project(self):

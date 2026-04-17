@@ -139,7 +139,7 @@ class HelpDialog(QDialog):
 
 <hr>
 <div class="footer">
-            © 2026 [ф]оноскоп | <a href="https://github.com">GitHub</a>
+            © 2026 [ф]оноскоп | <a href="https://github.com/ViktorR-BarreL/diploma_phonoskop">GitHub</a>
 </div>
 </body>
 </html>

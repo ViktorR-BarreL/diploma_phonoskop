@@ -5,9 +5,15 @@ __pycache__/
 *.py[cod]
 *$py.class
 models/
+*.bin
+*.safetensors
+*.mdl
+*.fst
 data/*.db
 *.log
 *.tmp
+*.zip
+*.tar.gz
 .vscode/
 .idea/
 Thumbs.db

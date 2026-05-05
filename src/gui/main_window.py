@@ -4,6 +4,7 @@ import shutil
 import copy
 import ctypes
 import csv
+import sys
 from datetime import datetime
 from collections import Counter
 
@@ -27,6 +28,7 @@ from src.engine import SpeechEngine
 from src.database import Database
 from src.search_engine import SearchEngine
 from src.export_manager import ExportManager
+from src.gui.download_window import DownloadProgressWindow
 
 
 class FullAnalysisWorker(QThread):
@@ -38,6 +40,7 @@ class FullAnalysisWorker(QThread):
         super().__init__()
         self.engine = engine
         self.audio_path = audio_path
+        self.last_p = -1
     
     def run(self):
         try:
@@ -63,7 +66,7 @@ class FullAnalysisWorker(QThread):
                 progress_callback=lambda msg, p: throttled_progress(msg, 80 + int(p * 0.2))
             )
 
-            # ЭТАП 3: Завершение ---
+            # ЭТАП 3: Завершение
             self.progress.emit("Финальная обработка данных...", 100)
             
             # Принудительная очистка мусора в памяти перед возвратом в GUI
@@ -88,6 +91,18 @@ class MainWindow(QMainWindow):
 
     def __init__(self, project_id=None, project_path=None, auto_analyze=False):
         super().__init__()
+
+        # Конфиг моделей (для возможной переустановки)
+        self.models_config = {
+            "phonoscopic": {
+                "repo_id": "ViktorR-BarreL/phonoscopic",
+                "local_dir": "./models/phonoscopic"
+            },
+            "vosk": {
+                "url": "https://alphacephei.com/vosk/models/vosk-model-small-ru-0.22.zip",
+                "local_dir": "./models/vosk"
+            }
+        }
         
         myappid = 'mycompany.phonoskop'
         try: 
@@ -106,11 +121,19 @@ class MainWindow(QMainWindow):
             self.setWindowIcon(QIcon(icon_path))
 
         # Инициализация движков
-        self.engine = SpeechEngine(
-            phoneme_model_path="./models/phonoscopic",
-            use_stt=True,
-            vosk_model_path="./models/vosk"
-        )
+        try:
+            self.engine = SpeechEngine(
+                phoneme_model_path="./models/phonoscopic",
+                use_stt=True,
+                vosk_model_path="./models/vosk"
+            )
+        except Exception as e:
+            # Если движок не смог загрузить файлы моделей
+            self.handle_engine_error(str(e))
+            # Если после обработки ошибки движок всё еще не создан - не продолжаем
+            if not hasattr(self, 'engine'): 
+                return
+            
         self.db = Database()
         self.search_engine = SearchEngine(USER_TO_IPA)
 
@@ -298,11 +321,14 @@ class MainWindow(QMainWindow):
         # Меню Вид
         view = bar.addMenu("Вид")
 
-        for name, target in [("Осциллограмма", self.canvas.p_wav), 
-                            ("Спектрограмма", self.canvas.p_spec)]:
-            a = QAction(name, self, checkable=True, checked=True)
-            a.triggered.connect(lambda c, t=target: t.setVisible(c))
-            view.addAction(a)
+        self.act_wav = QAction("Осциллограмма", self, checkable=True, checked=True)
+        self.act_spec = QAction("Спектрограмма", self, checkable=True, checked=True)
+
+        self.act_wav.triggered.connect(self.on_view_toggled)
+        self.act_spec.triggered.connect(self.on_view_toggled)
+
+        view.addAction(self.act_wav)
+        view.addAction(self.act_spec)
         
         view.addSeparator()
         
@@ -323,6 +349,48 @@ class MainWindow(QMainWindow):
         help_action.triggered.connect(self.show_help)
         help_menu.addAction(help_action)
 
+    def on_view_toggled(self):
+        if not self.act_wav.isChecked() and not self.act_spec.isChecked():
+            sender = self.sender()
+            sender.setChecked(True)
+            return
+        
+        self.canvas.p_wav.setVisible(self.act_wav.isChecked())
+        self.canvas.p_spec.setVisible(self.act_spec.isChecked())
+        
+        self.canvas.ci.layout.activate()
+
+    # Обработка ошибок при загрузке моделей
+    def handle_engine_error(self, error_msg):
+        msg = QMessageBox(self)
+        msg.setIcon(QMessageBox.Icon.Critical)
+        msg.setWindowTitle("Ошибка ресурсов")
+        msg.setText("Не удалось запустить аналитическое ядро.")
+        msg.setInformativeText(f"Файлы моделей повреждены или отсутствуют.\n\nЗапустить процесс восстановления?")
+        
+        btn_repair = msg.addButton("Восстановить", QMessageBox.ButtonRole.YesRole)
+        btn_exit = msg.addButton("Выход", QMessageBox.ButtonRole.NoRole)
+        msg.setDefaultButton(btn_repair)
+        
+        msg.exec()
+        
+        if msg.clickedButton() == btn_repair:
+            dl_win = DownloadProgressWindow(self.models_config)
+            if dl_win.exec():
+                try:
+                    self.engine = SpeechEngine(
+                        phoneme_model_path="./models/phonoscopic",
+                        use_stt=True,
+                        vosk_model_path="./models/vosk"
+                    )
+                except Exception as final_e:
+                    QMessageBox.critical(self, "Ошибка", f"Повторная ошибка: {final_e}")
+                    sys.exit(1)
+            else:
+                sys.exit(1)
+        else:
+            sys.exit(1)
+    
     # Работа с проектами
     def new_project(self):
         from src.gui.start_window import StartWindow

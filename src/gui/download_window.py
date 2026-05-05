@@ -37,5 +37,9 @@ class DownloadProgressWindow(QDialog):
         if success:
             self.accept() # Закрываем окно с успехом
         else:
-            QMessageBox.critical(self, "Ошибка загрузки", f"Не удалось загрузить модели:\n{error_msg}")
+            QMessageBox.critical(
+                self, 
+                "Ошибка загрузки", 
+                "Не удалось загрузить модели. Проверьте подключение к интернету и перезапустите программу."
+            )
             self.reject()

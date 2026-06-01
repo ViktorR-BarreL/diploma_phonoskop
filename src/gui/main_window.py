@@ -501,10 +501,10 @@ class MainWindow(QMainWindow):
             
             self.db.save_search_state(self.project_id, current_pattern, pattern_type, selected_indices)
 
-    def save_project(self):
+    def save_project(self, show_msg=True):
         '''Сохранение проекта'''
         if not self.project_path:
-            default_dir = os.path.join(os.path.expanduser("~"), "Documents", "[ф]оноскоп")
+            default_dir = os.path.join(os.path.expanduser("~"), "Documents", "фоноскоп")
             os.makedirs(default_dir, exist_ok=True)
             
             project_folder = QFileDialog.getExistingDirectory(
@@ -542,12 +542,13 @@ class MainWindow(QMainWindow):
             
             self.status_lbl.setText("Проект сохранен")
             
-            msg = QMessageBox(self)
-            msg.setWindowTitle("Сохранение")
-            msg.setText(f"Проект сохранен в:\n{self.project_path}")
-            msg.setStandardButtons(QMessageBox.StandardButton.Ok)
-            msg.button(QMessageBox.StandardButton.Ok).setText("ОК")
-            msg.exec()
+            if show_msg:
+                msg = QMessageBox(self)
+                msg.setWindowTitle("Сохранение")
+                msg.setText(f"Проект сохранен в:\n{self.project_path}")
+                msg.setStandardButtons(QMessageBox.StandardButton.Ok)
+                msg.button(QMessageBox.StandardButton.Ok).setText("ОК")
+                msg.exec()
 
     def save_project_as(self):
         '''Сохранить проект в новое место с новым именем'''
@@ -765,12 +766,13 @@ class MainWindow(QMainWindow):
         # Обновляем текст в поле
         self.text_transcript = text if text else ""
         
-        self.transcript_text.blockSignals(True) # Блокируем, чтобы не сработал on_transcript_edited
+        self.transcript_text.blockSignals(True)
         self.transcript_text.setText(self.text_transcript)
-        self.transcript_text.blockSignals(False) # Разблокируем обратно
+        self.transcript_text.blockSignals(False)
         
         self.status_lbl.setText("Анализ завершен")
-        self.save_project()
+        self.save_project(show_msg=False)
+
 
     def on_analysis_error(self, error_msg):
         self.progress.hide()

@@ -4,7 +4,6 @@ import shutil
 import hashlib
 
 # Оптимизация для CUDA и отрисовки
-os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 from PyQt6.QtWidgets import QApplication, QMessageBox

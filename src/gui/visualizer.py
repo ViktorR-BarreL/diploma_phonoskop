@@ -51,7 +51,7 @@ class AudioCanvas(pg.GraphicsLayoutWidget):
             p.setMenuEnabled(False)
             p.setLimits(xMin=0)
             p.setMouseEnabled(x=True, y=False)
-            p.setClipToView(True) # Не рисовать то, что за краем экрана
+            p.setClipToView(True)
 
         self.img_spec = pg.ImageItem()
         self.p_spec.addItem(self.img_spec)
@@ -73,8 +73,7 @@ class AudioCanvas(pg.GraphicsLayoutWidget):
         self.lod_timer.setSingleShot(True)
         self.lod_timer.timeout.connect(self.update_lod)
         
-        # Следим за изменением масштаба
-        self.p_wav.sigXRangeChanged.connect(lambda: self.lod_timer.start(100))
+        self.p_wav.sigXRangeChanged.connect(lambda: self.lod_timer.start(30))
 
     def plot_audio(self, file_path):
         y, sr = librosa.load(file_path, sr=16000)
@@ -87,7 +86,6 @@ class AudioCanvas(pg.GraphicsLayoutWidget):
         self.p_wav.clear()
         self.p_wav.addItem(self.playheads[0])
         
-        # Отрисовка волны с ограничением точек (оптимизация графики)
         step = max(1, len(y) // 40000)
         y_sampled = y[::step]
         t_sampled = np.linspace(0, self.duration, len(y_sampled))
@@ -109,11 +107,8 @@ class AudioCanvas(pg.GraphicsLayoutWidget):
         if not phoneme_list: 
             return
 
-        # Рисуем все границы
-        for i, phn in enumerate(phoneme_list):
-            self.create_boundary_pair(i, phn['start'], phn['end'])
-            
-            # Инициализируем пустые списки для регионов и меток
+        for i in range(len(phoneme_list)):
+            self.boundaries[i] = {}
             self.regions[i] = []
             self.labels[i] = []
 
@@ -127,16 +122,30 @@ class AudioCanvas(pg.GraphicsLayoutWidget):
         x_start, x_end = view_range
         visible_width = x_end - x_start
 
-        # Если в окне больше 20 секунд - текст не рисуем вообще
-        show_text = visible_width < 20.0
-        # Если в окне больше 60 секунд - фон (регионы) не рисуем
+        show_text = visible_width < 25.0
         show_regions = visible_width < 60.0
+        show_boundaries = visible_width < 90.0
 
         for i, phn in enumerate(self.raw_phonemes):
-            # Проверяем, попадает ли фонема в экран (с небольшим запасом)
-            is_visible = phn['end'] > x_start - 1 and phn['start'] < x_end + 1
+            is_visible = phn['end'] > (x_start - 1.0) and phn['start'] < (x_end + 1.0)
             
-            # УПРАВЛЕНИЕ РЕГИОНАМИ НА ВСЕХ ГРАФИКАХ
+            # 1. ГРАНИЦЫ
+            if is_visible and show_boundaries:
+                if i not in self.boundaries or not self.boundaries[i]:
+                    self.create_boundary_pair(i, phn['start'], phn['end'])
+                else:
+                    for b_type in ['start', 'end']:
+                        for line in self.boundaries[i][b_type]:
+                            if not line.isVisible():
+                                line.show()
+            else:
+                if i in self.boundaries and self.boundaries[i]:
+                    for b_type in ['start', 'end']:
+                        for line in self.boundaries[i][b_type]:
+                            if line.isVisible():
+                                line.hide()
+
+            # 2. РЕГИОНЫ 
             if is_visible and show_regions:
                 if not self.regions[i]:
                     for p in self.plots:
@@ -149,17 +158,19 @@ class AudioCanvas(pg.GraphicsLayoutWidget):
                         self.regions[i].append(r)
                 else: 
                     for r in self.regions[i]: 
-                        r.show()
+                        if not r.isVisible():
+                            r.show()
             else:
                 if self.regions[i]:
                     for r in self.regions[i]: 
-                        r.hide()
+                        if r.isVisible():
+                            r.hide()
 
+            # 3. ТЕКСТ
             if is_visible and show_text:
                 if not self.labels[i]:
                     label = IPA_TO_USER.get(phn['label'], phn['label']) if self._view_mode == "RU" else phn['label']
                     for p_idx, p in enumerate(self.plots):
-                        # Y-позиция зависит от графика
                         y_pos = 0 if p_idx == 0 else 4000
                         txt = pg.TextItem(text=label, color='w', anchor=(0.5, 0.5))
                         txt.setPos((phn['start'] + phn['end'])/2, y_pos)
@@ -168,15 +179,18 @@ class AudioCanvas(pg.GraphicsLayoutWidget):
                         self.labels[i].append(txt)
                 else:
                     for lbl in self.labels[i]: 
-                        lbl.show()
+                        if not lbl.isVisible():
+                            lbl.show()
             else:
                 if self.labels[i]:
                     for lbl in self.labels[i]: 
-                        lbl.hide()
+                        if lbl.isVisible():
+                            lbl.hide()
 
     def create_boundary_pair(self, idx, s_t, e_t):
         self.boundaries[idx] = {'start': [], 'end': []}
-        if s_t >= e_t: e_t = s_t + 0.1
+        if s_t >= e_t: 
+            e_t = s_t + 0.1
         
         for b_type, pos, default_color in [('start', s_t, '#9b59b6'), ('end', e_t, '#3498db')]:
             lines = []
@@ -195,9 +209,10 @@ class AudioCanvas(pg.GraphicsLayoutWidget):
     def handle_line_click(self, line, ev):
         if self.selected_boundary:
             old_idx, old_type = self.selected_boundary
-            if old_idx in self.boundaries:
+            if old_idx in self.boundaries and self.boundaries[old_idx]:
                 old_color = self.boundaries[old_idx][old_type][0].default_color
-                for l in self.boundaries[old_idx][old_type]: l.setPen(pg.mkPen(old_color, width=3))
+                for l in self.boundaries[old_idx][old_type]: 
+                    l.setPen(pg.mkPen(old_color, width=3))
         
         self.selected_boundary = (line.index, line.b_type)
         for l in self.boundaries[line.index][line.b_type]:
@@ -210,24 +225,27 @@ class AudioCanvas(pg.GraphicsLayoutWidget):
         val = max(0, min(dragged_line.value(), self.duration))
         idx, b_type = dragged_line.index, dragged_line.b_type
         
-        for line in self.boundaries[idx][b_type]:
-            line.blockSignals(True)
-            line.setValue(val)
-            line.blockSignals(False)
+        if idx in self.boundaries and self.boundaries[idx]:
+            for line in self.boundaries[idx][b_type]:
+                line.blockSignals(True)
+                line.setValue(val)
+                line.blockSignals(False)
         
         if idx in self.regions and self.regions[idx]:
             for r in self.regions[idx]:
                 reg = list(r.getRegion())
-                if b_type == 'start': reg[0] = val
-                else: reg[1] = val
+                if b_type == 'start': 
+                    reg[0] = val
+                else: 
+                    reg[1] = val
                 r.setRegion(reg)
                 
         if idx in self.labels and self.labels[idx]:
-            # Берем актуальные границы из региона
-            start = self.boundaries[idx]['start'][0].value()
-            end = self.boundaries[idx]['end'][0].value()
-            for lbl in self.labels[idx]:
-                lbl.setPos((start + end)/2, lbl.pos().y())
+            if idx in self.boundaries and self.boundaries[idx]:
+                start = self.boundaries[idx]['start'][0].value()
+                end = self.boundaries[idx]['end'][0].value()
+                for lbl in self.labels[idx]:
+                    lbl.setPos((start + end)/2, lbl.pos().y())
         
         self.boundary_changed.emit(idx, b_type, val)
 
@@ -237,17 +255,18 @@ class AudioCanvas(pg.GraphicsLayoutWidget):
         del_act = menu.addAction("Удалить этот сегмент")
         action = menu.exec(pos.toPoint() if hasattr(pos, 'toPoint') else QCursor.pos())
         if action == add_act:
-            t = self.boundaries[idx]['end'][0].value() if idx in self.boundaries else 0
+            t = self.boundaries[idx]['end'][0].value() if idx in self.boundaries and self.boundaries[idx] else 0
             self.request_add.emit(idx, t)
         elif action == del_act:
             self.request_delete.emit(idx)
 
     def clear_ui(self):
         for b_dict in self.boundaries.values():
-            for lines in b_dict.values():
-                for line in lines:
-                    for p in self.plots: 
-                        p.removeItem(line)
+            if b_dict:
+                for lines in b_dict.values():
+                    for line in lines:
+                        for p in self.plots: 
+                            p.removeItem(line)
         
         for r_list in self.regions.values():
             for r in r_list:
@@ -266,4 +285,5 @@ class AudioCanvas(pg.GraphicsLayoutWidget):
         self.selected_boundary = None
 
     def update_playhead(self, t):
-        for ph in self.playheads: ph.setValue(t)
+        for ph in self.playheads: 
+            ph.setValue(t)

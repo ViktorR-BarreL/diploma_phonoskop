@@ -223,30 +223,54 @@ class AudioCanvas(pg.GraphicsLayoutWidget):
 
     def sync_lines_realtime(self, dragged_line):
         val = max(0, min(dragged_line.value(), self.duration))
-        idx, b_type = dragged_line.index, dragged_line.b_type
-        
-        if idx in self.boundaries and self.boundaries[idx]:
-            for line in self.boundaries[idx][b_type]:
-                line.blockSignals(True)
-                line.setValue(val)
-                line.blockSignals(False)
-        
+        idx = dragged_line.index
+        b_type = dragged_line.b_type
+
+        # Вычисляем допустимый диапазон для данной границы
+        if b_type == 'start':
+            min_val = 0.0
+            if idx > 0:
+                prev_end = self.boundaries[idx-1]['end'][0].value()
+                min_val = max(min_val, prev_end)
+            max_val = self.boundaries[idx]['end'][0].value()
+            if idx + 1 < len(self.raw_phonemes):
+                next_start = self.boundaries[idx+1]['start'][0].value()
+                max_val = min(max_val, next_start)
+            val = min(max(val, min_val), max_val)
+        else:  # 'end'
+            min_val = self.boundaries[idx]['start'][0].value()
+            if idx > 0:
+                prev_end = self.boundaries[idx-1]['end'][0].value()
+                min_val = max(min_val, prev_end)
+            max_val = self.duration
+            if idx + 1 < len(self.raw_phonemes):
+                next_start = self.boundaries[idx+1]['start'][0].value()
+                max_val = min(max_val, next_start)
+            val = min(max(val, min_val), max_val)
+
+        # Обновляем все линии для данного индекса и типа
+        for line in self.boundaries[idx][b_type]:
+            line.blockSignals(True)
+            line.setValue(val)
+            line.blockSignals(False)
+
+        # Обновляем регионы (полупрозрачные блоки)
         if idx in self.regions and self.regions[idx]:
             for r in self.regions[idx]:
                 reg = list(r.getRegion())
-                if b_type == 'start': 
+                if b_type == 'start':
                     reg[0] = val
-                else: 
+                else:
                     reg[1] = val
                 r.setRegion(reg)
-                
+
+        # Обновляем текстовые метки фонем
         if idx in self.labels and self.labels[idx]:
-            if idx in self.boundaries and self.boundaries[idx]:
-                start = self.boundaries[idx]['start'][0].value()
-                end = self.boundaries[idx]['end'][0].value()
-                for lbl in self.labels[idx]:
-                    lbl.setPos((start + end)/2, lbl.pos().y())
-        
+            start = self.boundaries[idx]['start'][0].value()
+            end = self.boundaries[idx]['end'][0].value()
+            for lbl in self.labels[idx]:
+                lbl.setPos((start + end) / 2, lbl.pos().y())
+
         self.boundary_changed.emit(idx, b_type, val)
 
     def show_context_menu(self, idx, pos):

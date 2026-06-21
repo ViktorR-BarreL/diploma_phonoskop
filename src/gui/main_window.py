@@ -92,6 +92,9 @@ class MainWindow(QMainWindow):
     def __init__(self, project_id=None, project_path=None, auto_analyze=False):
         super().__init__()
 
+        self.undo_stack = []
+        self.redo_stack = [] 
+
         # Конфиг моделей (для возможной переустановки)
         self.models_config = {
             "phonoscopic": {
@@ -408,6 +411,8 @@ class MainWindow(QMainWindow):
         print(f"[MainWindow] Загрузка проекта из: {path}")
         self.project_path = path
         
+        self.undo_stack.clear()
+        self.redo_stack.clear()
         self.phonemes_data = []
         self.text_transcript = ""
         self.canvas.clear_ui() 
@@ -796,16 +801,30 @@ class MainWindow(QMainWindow):
         self.undo_stack.append(copy.deepcopy(self.phonemes_data))
         if len(self.undo_stack) > 50:
             self.undo_stack.pop(0)
+        self.redo_stack.clear()
 
     def undo(self):
         if len(self.undo_stack) > 1:
+            self.redo_stack.append(copy.deepcopy(self.phonemes_data))
+            if len(self.redo_stack) > 50:
+                self.redo_stack.pop(0)
             self.undo_stack.pop()
             self.phonemes_data = copy.deepcopy(self.undo_stack[-1])
             self.display_phonemes(self.phonemes_data)
             self.status_lbl.setText("Отменено")
+        else:
+            self.status_lbl.setText("Нечего отменять")
 
     def redo(self):
-        self.status_lbl.setText("Redo: сохраните состояние перед изменениями")
+        if self.redo_stack:
+            self.undo_stack.append(copy.deepcopy(self.phonemes_data))
+            if len(self.undo_stack) > 50:
+                self.undo_stack.pop(0)
+            self.phonemes_data = self.redo_stack.pop()
+            self.display_phonemes(self.phonemes_data)
+            self.status_lbl.setText("Повторено")
+        else:
+            self.status_lbl.setText("Нечего повторять")
 
     def on_boundary_moved(self, idx, b_type, time):
         self.save_state()
